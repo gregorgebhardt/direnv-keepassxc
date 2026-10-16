@@ -1,0 +1,12 @@
+#!/bin/bash
+# Removes the KeePass master password that use_keepass (direnv) keeps in the macOS Keychain.
+# Honors KEEPASS_KEYCHAIN_SERVICE and KEEPASS_KEYCHAIN_ACCOUNT when they're exported.
+service=${KEEPASS_KEYCHAIN_SERVICE:-keepass-master}
+account=${KEEPASS_KEYCHAIN_ACCOUNT:-${USER:-$(id -un)}}
+
+if security delete-generic-password -s "$service" -a "$account" >/dev/null 2>&1; then
+  echo "Removed the KeePass master password ($service) from your Keychain."
+else
+  echo "No KeePass master password ($service) found in your Keychain." >&2
+  exit 1
+fi

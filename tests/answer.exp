@@ -1,0 +1,20 @@
+set timeout 60
+set answers [split $env(ANSWERS) "|"]
+set i 0
+log_user 1
+spawn {*}$argv
+expect {
+  "(empty to skip): " {
+    if {$i < [llength $answers]} {
+      send -- "[lindex $answers $i]\r"
+    } else {
+      send -- "\r"
+    }
+    incr i
+    exp_continue
+  }
+  eof {}
+  timeout { puts "\nEXPECT-TIMEOUT"; exit 2 }
+}
+catch wait result
+exit [lindex $result 3]
