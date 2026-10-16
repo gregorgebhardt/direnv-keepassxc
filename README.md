@@ -21,28 +21,74 @@ use_keepass 'Databases/Staging' DB_PASSWORD
 - macOS (the Keychain is accessed with the `security` command)
 - direnv
 - KeePassXC. `keepassxc-cli` is used from your `PATH`, or from `/Applications/KeePassXC.app` if it isn't there.
+- git, for the installer or a manual install
 
 ## Installation
 
-Clone the repository and link the library into direnv's `lib` folder, which direnv loads automatically:
+There are three ways to install it. Pick one: the installer won't replace a link that Homebrew or a manual install created.
+
+### Installer
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/gregorgebhardt/direnv-keepassxc/main/install.sh | bash
+```
+
+The installer:
+
+- clones the latest release to `~/.local/share/direnv-keepassxc`;
+- links `keepass.sh` into direnv's `lib` folder, which direnv loads automatically, and `keepass-forget` into `~/.local/bin`;
+- asks for your database path, unless your `direnvrc` already sets `KEEPASS_DATABASE`.
+
+It never replaces files it didn't create. To read it before running it, clone the repository and run `./install.sh` instead.
+
+| Option | Effect |
+|---|---|
+| `--version <tag>` | Install a specific release, e.g. `v1.0.0`. `--version main` installs the latest commit. |
+| `--database <path>` | Set the database path without being asked. |
+| `--uninstall` | Remove the links and the clone. |
+
+When piping into `bash`, put options after `bash -s --`, e.g. `curl … | bash -s -- --version v1.0.0`. `DIRENV_KEEPASSXC_DIR` and `DIRENV_KEEPASSXC_BIN` change where the clone and `keepass-forget` go.
+
+### Homebrew
+
+```sh
+brew install gregorgebhardt/tap/direnv-keepassxc
+mkdir -p ~/.config/direnv/lib
+ln -s "$(brew --prefix)/opt/direnv-keepassxc/share/direnv-keepassxc/keepass.sh" ~/.config/direnv/lib/keepass.sh
+```
+
+Homebrew puts `keepass-forget` on your `PATH`. Then set your database, as described below.
+
+### Manual
 
 ```sh
 git clone https://github.com/gregorgebhardt/direnv-keepassxc.git ~/.local/share/direnv-keepassxc
 mkdir -p ~/.config/direnv/lib
 ln -s ~/.local/share/direnv-keepassxc/keepass.sh ~/.config/direnv/lib/keepass.sh
+ln -s ~/.local/share/direnv-keepassxc/bin/keepass-forget ~/.local/bin/keepass-forget   # optional
 ```
 
-Tell it where your database is, in `~/.config/direnv/direnvrc`:
+Then set your database, as described below.
+
+### Setting the database
+
+Unless the installer did it for you, tell `use_keepass` where your database is, in `~/.config/direnv/direnvrc`:
 
 ```sh
 KEEPASS_DATABASE="$HOME/Documents/Passwords.kdbx"
 ```
 
-Optionally, link `keepass-forget` into a directory on your `PATH`:
+## Updating and uninstalling
 
-```sh
-ln -s ~/.local/share/direnv-keepassxc/bin/keepass-forget ~/.local/bin/keepass-forget
-```
+Updates are never automatic. The installer and Homebrew only install tagged releases, and only when you run them.
+
+| Installed with | Update | Uninstall |
+|---|---|---|
+| Installer | `~/.local/share/direnv-keepassxc/install.sh` | `~/.local/share/direnv-keepassxc/install.sh --uninstall` |
+| Homebrew | `brew upgrade direnv-keepassxc` | `brew uninstall direnv-keepassxc`, then delete `~/.config/direnv/lib/keepass.sh` |
+| Manual | `git -C ~/.local/share/direnv-keepassxc pull` (follows `main`) | Delete the links and the clone |
+
+The Homebrew link survives upgrades, because it points to Homebrew's stable `opt` folder. To also remove the stored master password, run `keepass-forget` before uninstalling.
 
 ## Usage
 
@@ -81,11 +127,20 @@ An `.envrc` can change them before its `use_keepass` lines, for example to read 
 ## Tests
 
 ```sh
-tests/run.sh
-DIRENV_BASH=/bin/bash tests/run.sh   # with macOS's bash 3.2
+tests/run.sh                                            # use_keepass and keepass-forget
+DIRENV_BASH=/bin/bash tests/run.sh                      # the same with macOS's bash 3.2
+tests/installer.sh                                      # install.sh, with macOS's bash 3.2
+INSTALL_BASH=/opt/homebrew/bin/bash tests/installer.sh  # install.sh, with another bash
 ```
 
-The tests run a real direnv, with its own config and state, against throwaway databases. They need `expect` (included with macOS) and create and remove Keychain items named `use-keepass-test*`.
+`tests/run.sh` runs a real direnv, with its own config and state, against throwaway databases. It creates and removes Keychain items named `use-keepass-test*`. `tests/installer.sh` installs from a local copy with test releases into throwaway home folders. Both need `expect`, which comes with macOS.
+
+## Releasing
+
+1. Create the release, which also creates the tag: `gh release create vX.Y.Z --target main --generate-notes`.
+2. In [gregorgebhardt/homebrew-tap](https://github.com/gregorgebhardt/homebrew-tap), update `url` and `sha256` in `Formula/direnv-keepassxc.rb`. The checksum comes from `curl -fsSL https://github.com/gregorgebhardt/direnv-keepassxc/archive/refs/tags/vX.Y.Z.tar.gz | shasum -a 256`.
+
+The installer picks up the new release the next time it runs.
 
 ## License
 
