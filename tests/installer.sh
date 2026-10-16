@@ -195,6 +195,55 @@ check "running it again is harmless" equals "$status:$out" "0:Nothing to remove.
 out=$(install_in "$H2" --uninstall)
 check "leaves files it didn't create" equals "$(cat "$H2/.config/direnv/lib/keepass.sh")" "# my own"
 
+echo "I14 linking an existing copy, like Homebrew's direnv-keepassxc-setup"
+BREW=$T/brew/opt/direnv-keepassxc/share/direnv-keepassxc
+mkdir -p "$BREW"
+cp "$REPO/keepass.sh" "$BREW/keepass.sh"
+setup_in() { # home [args...] -> output, like direnv-keepassxc-setup without a terminal
+  local home=$1
+  shift
+  env -i HOME="$home" PATH="$PATH" DIRENV_KEEPASSXC_FROM="$BREW" \
+    "$INSTALL_BASH" "$REPO/install.sh" "$@" </dev/null 2>&1
+}
+H9=$T/home9
+out=$(setup_in "$H9" --database "$H9/db.kdbx")
+check "links that copy" equals "$(readlink "$H9/.config/direnv/lib/keepass.sh")" "$BREW/keepass.sh"
+check "says so" has "$out" "Linked ~/.config/direnv/lib/keepass.sh."
+check "saves the setting" has "$(cat "$H9/.config/direnv/direnvrc")" 'KEEPASS_DATABASE="$HOME/db.kdbx"'
+check "suggests a next step" has "$out" "Next: add lines like"
+check "clones nothing" equals "$(exists "$H9/.local/share/direnv-keepassxc")" no
+check "links no keepass-forget" equals "$(exists "$H9/.local/bin/keepass-forget")" no
+out=$(setup_in "$H9")
+check "running it again is harmless" has "$out" "Already linked ~/.config/direnv/lib/keepass.sh."
+check "setting not duplicated" equals "$(grep -c 'KEEPASS_DATABASE=' "$H9/.config/direnv/direnvrc")" 1
+H10=$T/home10
+mkdir -p "$H10/.config/direnv/lib"
+ln -s "$BREW/keepass.sh" "$H10/.config/direnv/lib/keepass.sh"
+out=$(setup_in "$H10" --database "$H10/db.kdbx")
+check "a matching link made by hand counts as set up" has "$out" "Already linked ~/.config/direnv/lib/keepass.sh."
+out=$(setup_in "$H7")
+status=$?
+check "won't replace the installer's link" equals "$status:$(grep -c "already exists and wasn't created" <<<"$out")" "1:1"
+out=$(setup_in "$H9" --version v0.1.0)
+status=$?
+check "--version is refused" equals "$status:$(grep -c "doesn't apply when linking an existing copy" <<<"$out")" "1:1"
+out=$(setup_in "$H9" --help)
+check "--help names the Homebrew command" has "$out" "Usage: direnv-keepassxc-setup"
+out=$(env -i HOME="$H9" PATH="$PATH" DIRENV_KEEPASSXC_FROM="$T/nowhere" "$INSTALL_BASH" "$REPO/install.sh" </dev/null 2>&1)
+status=$?
+check "a missing copy fails" equals "$status:$(grep -c "there's no keepass.sh in" <<<"$out")" "1:1"
+
+echo "I15 removing that link again"
+out=$(setup_in "$H9" --uninstall)
+check "removes the link" equals "$(exists "$H9/.config/direnv/lib/keepass.sh")" no
+check "leaves the copy" equals "$(exists "$BREW/keepass.sh")" yes
+check "keeps direnvrc" has "$(cat "$H9/.config/direnv/direnvrc")" "KEEPASS_DATABASE="
+check "explains how to remove the password" has "$out" "security delete-generic-password -s keepass-master"
+out=$(setup_in "$H9" --uninstall)
+check "running it again is harmless" equals "$out" "Nothing to remove."
+setup_in "$H7" --uninstall >/dev/null
+check "leaves the installer's link alone" equals "$(readlink "$H7/.config/direnv/lib/keepass.sh")" "$H7/.local/share/direnv-keepassxc/keepass.sh"
+
 echo
 echo "$pass passed, $fail failed"
 [[ $fail -eq 0 ]]

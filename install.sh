@@ -9,6 +9,9 @@
 # links keepass.sh into direnv's lib folder and keepass-forget into DIRENV_KEEPASSXC_BIN
 # (default ~/.local/bin). It never replaces files it didn't create. DIRENV_KEEPASSXC_REPO
 # installs from another repository, such as a fork.
+#
+# With DIRENV_KEEPASSXC_FROM=<dir> it links the keepass.sh in <dir> instead of cloning;
+# Homebrew's direnv-keepassxc-setup command runs it that way.
 
 # Everything runs inside main, so a partly downloaded script can't run.
 main() {
@@ -20,6 +23,8 @@ main() {
   CONFIG_DIR=${DIRENV_CONFIG:-${XDG_CONFIG_HOME:-$HOME/.config}/direnv}
   LIB_LINK=$CONFIG_DIR/lib/keepass.sh
   BIN_LINK=$BIN_DIR/keepass-forget
+  FROM=${DIRENV_KEEPASSXC_FROM:-}
+  FROM=${FROM%/}
 
   local uninstall='' version='' database='' first_install=''
   while (($# > 0)); do
@@ -39,12 +44,24 @@ main() {
     shift
   done
 
+  if [[ -n $FROM ]]; then
+    [[ -z $version ]] ||
+      die "--version doesn't apply when linking an existing copy; update that copy instead, e.g. with brew upgrade"
+    if [[ -n $uninstall ]]; then
+      unlink_from
+    else
+      setup_from "$database"
+    fi
+    return 0
+  fi
+
   if [[ -n $uninstall ]]; then
     uninstall
     return 0
   fi
 
   check_requirements
+  command -v git >/dev/null || die "git is required"
   can_link "$CLONE_DIR/keepass.sh" "$LIB_LINK"
   can_link "$CLONE_DIR/bin/keepass-forget" "$BIN_LINK"
   [[ -e $CLONE_DIR ]] || first_install=1
@@ -58,12 +75,23 @@ main() {
     *":$BIN_DIR:"*) ;;
     *) note "$(pretty "$BIN_DIR") isn't on your PATH, so neither is keepass-forget" ;;
   esac
-  if [[ -n $first_install ]]; then
-    say "Next: add lines like  use_keepass 'API Keys/GitHub' GITHUB_TOKEN  to an .envrc."
-  fi
+  [[ -z $first_install ]] || next_steps
 }
 
 usage() {
+  if [[ -n $FROM ]]; then
+    cat <<'EOF'
+Usage: direnv-keepassxc-setup [--database <path>]
+       direnv-keepassxc-setup --uninstall
+
+Links keepass.sh into direnv's lib folder and saves your database path as
+KEEPASS_DATABASE in your direnvrc, unless it's set already. Safe to run again.
+
+  --database <path>  your .kdbx file, instead of being asked
+  --uninstall        remove the link; run this before brew uninstall
+EOF
+    return 0
+  fi
   cat <<'EOF'
 Usage: install.sh [--version <tag>|main] [--database <path>]
        install.sh --uninstall
@@ -86,6 +114,10 @@ die() {
   exit 1
 }
 
+next_steps() {
+  say "Next: add lines like  use_keepass 'API Keys/GitHub' GITHUB_TOKEN  to an .envrc."
+}
+
 # Shows paths below your home folder as ~/...
 pretty() {
   # shellcheck disable=SC2088 # the tilde is only displayed
@@ -96,7 +128,6 @@ pretty() {
 }
 
 check_requirements() {
-  command -v git >/dev/null || die "git is required"
   [[ $(uname -s) == Darwin ]] ||
     note "use_keepass only works on macOS, because it keeps the master password in the Keychain"
   command -v direnv >/dev/null || note "direnv isn't installed yet: https://direnv.net"
@@ -260,8 +291,39 @@ uninstall() {
     say "Nothing to remove."
     return 0
   fi
+  keychain_hint
+}
+
+keychain_hint() {
   say "Your direnvrc settings and the master password in your Keychain are still there. To remove the password:"
   say "  security delete-generic-password -s keepass-master -a \"\$USER\""
+}
+
+# Links an existing copy, such as Homebrew's, instead of managing a clone.
+setup_from() {
+  local target=$FROM/keepass.sh
+
+  [[ -f $target ]] || die "there's no keepass.sh in $(pretty "$FROM")"
+  check_requirements
+  can_link "$target" "$LIB_LINK"
+  if [[ -L $LIB_LINK ]]; then
+    say "Already linked $(pretty "$LIB_LINK")."
+    configure_database "$1"
+  else
+    link "$target" "$LIB_LINK"
+    configure_database "$1"
+    next_steps
+  fi
+}
+
+unlink_from() {
+  if [[ -L $LIB_LINK && $(readlink "$LIB_LINK") == "$FROM/keepass.sh" ]]; then
+    rm "$LIB_LINK"
+    say "Removed $(pretty "$LIB_LINK")."
+    keychain_hint
+  else
+    say "Nothing to remove."
+  fi
 }
 
 main "$@"; exit

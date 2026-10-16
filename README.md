@@ -25,7 +25,7 @@ use_keepass 'Databases/Staging' DB_PASSWORD
 
 ## Installation
 
-There are three ways to install it. Pick one: the installer won't replace a link that Homebrew or a manual install created.
+There are three ways to install it. Pick one: neither the installer nor Homebrew's setup command replaces a link that another method created.
 
 ### Installer
 
@@ -53,11 +53,10 @@ When piping into `bash`, put options after `bash -s --`, e.g. `curl … | bash -
 
 ```sh
 brew install gregorgebhardt/tap/direnv-keepassxc
-mkdir -p ~/.config/direnv/lib
-ln -s "$(brew --prefix)/opt/direnv-keepassxc/share/direnv-keepassxc/keepass.sh" ~/.config/direnv/lib/keepass.sh
+direnv-keepassxc-setup
 ```
 
-Homebrew puts `keepass-forget` on your `PATH`. Then set your database, as described below.
+`direnv-keepassxc-setup` links Homebrew's copy of `keepass.sh` into direnv's `lib` folder and asks for your database path, like the installer. Homebrew can't create that link itself, because it only writes inside its own folders. Homebrew also puts `keepass-forget` on your `PATH`.
 
 ### Manual
 
@@ -72,7 +71,7 @@ Then set your database, as described below.
 
 ### Setting the database
 
-Unless the installer did it for you, tell `use_keepass` where your database is, in `~/.config/direnv/direnvrc`:
+Unless the installer or `direnv-keepassxc-setup` did it for you, tell `use_keepass` where your database is, in `~/.config/direnv/direnvrc`:
 
 ```sh
 KEEPASS_DATABASE="$HOME/Documents/Passwords.kdbx"
@@ -85,7 +84,7 @@ Updates are never automatic. The installer and Homebrew only install tagged rele
 | Installed with | Update | Uninstall |
 |---|---|---|
 | Installer | `~/.local/share/direnv-keepassxc/install.sh` | `~/.local/share/direnv-keepassxc/install.sh --uninstall` |
-| Homebrew | `brew upgrade direnv-keepassxc` | `brew uninstall direnv-keepassxc`, then delete `~/.config/direnv/lib/keepass.sh` |
+| Homebrew | `brew upgrade direnv-keepassxc` | `direnv-keepassxc-setup --uninstall`, then `brew uninstall direnv-keepassxc` |
 | Manual | `git -C ~/.local/share/direnv-keepassxc pull` (follows `main`) | Delete the links and the clone |
 
 The Homebrew link survives upgrades, because it points to Homebrew's stable `opt` folder. To also remove the stored master password, run `keepass-forget` before uninstalling.
